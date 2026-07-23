@@ -134,9 +134,12 @@
 <section id="view-album" class="hidden">
   <div class="card">
     <h2>Progresso geral</h2>
-    <div id="albumSummary" class="summary"></div>
-    <div id="teamList"></div>
-    <div id="albumEmpty" class="empty-state hidden">Nenhuma seleção marcada ainda. Vá em "Marcar" pra começar.</div>
+    <button class="btn btn-secondary btn-block" id="progressToggleBtn" onclick="toggleProgressView()">Ver progresso geral</button>
+    <div id="progressView" class="hidden">
+      <div id="albumSummary" class="summary"></div>
+      <div id="teamList"></div>
+      <div id="albumEmpty" class="empty-state hidden">Nenhuma seleção marcada ainda. Vá em "Marcar" pra começar.</div>
+    </div>
   </div>
   <div class="card">
     <h2>Faltando em tudo</h2>
@@ -303,7 +306,17 @@ function switchTab(name){
     renderAlbum();
     document.getElementById('missingView').classList.add('hidden');
     document.getElementById('missingToggleBtn').textContent = 'Ver todas as faltantes';
+    document.getElementById('progressView').classList.add('hidden');
+    document.getElementById('progressToggleBtn').textContent = 'Ver progresso geral';
   }
+}
+
+function toggleProgressView(){
+  const view = document.getElementById('progressView');
+  const btn = document.getElementById('progressToggleBtn');
+  const willShow = view.classList.contains('hidden');
+  view.classList.toggle('hidden', !willShow);
+  btn.textContent = willShow ? 'Ocultar progresso geral' : 'Ver progresso geral';
 }
 
 /* ---------------- Seleção de time ---------------- */
