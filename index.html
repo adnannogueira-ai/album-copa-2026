@@ -69,6 +69,17 @@
   textarea{width:100%;min-height:160px;border-radius:10px;border:1px solid var(--linha);
     background:var(--card2);color:var(--texto);padding:10px;font-size:13px;font-family:monospace;}
   small.muted{color:var(--muted);}
+  .missing-scroll{max-height:420px;overflow-y:auto;border:1px solid var(--linha);border-radius:10px;
+    padding:10px;background:var(--card2);}
+  .missing-section{margin-bottom:14px;}
+  .missing-section:last-child{margin-bottom:0;}
+  .missing-title{font-weight:700;font-size:14px;margin-bottom:6px;display:flex;
+    justify-content:space-between;align-items:center;}
+  .missing-count{font-size:12px;color:var(--muted);font-weight:600;}
+  .missing-chips{display:flex;flex-wrap:wrap;gap:6px;}
+  .missing-chip{background:#3a1414;color:#f3a9a4;border:1px solid var(--vermelho);
+    border-radius:8px;padding:4px 8px;font-size:12px;font-weight:700;}
+  .missing-all-ok{text-align:center;color:var(--muted);padding:20px 10px;font-size:13px;}
 </style>
 </head>
 <body>
@@ -123,12 +134,16 @@
     <div id="albumEmpty" class="empty-state hidden">Nenhuma seleção marcada ainda. Vá em "Marcar" pra começar.</div>
   </div>
   <div class="card">
-    <h2>Lista de faltantes (todas as seleções)</h2>
-    <button class="btn btn-secondary btn-block" onclick="buildMissingText()">Gerar lista</button>
-    <textarea id="missingText" class="hidden" readonly></textarea>
-    <div class="row hidden" id="exportBtns">
-      <button class="btn btn-primary" onclick="copyMissing()">Copiar</button>
-      <button class="btn btn-secondary" onclick="shareMissing()">Compartilhar</button>
+    <h2>Faltando em tudo</h2>
+    <p class="hint">Veja de uma vez só o que falta em cada seleção e nas figurinhas especiais.</p>
+    <button class="btn btn-secondary btn-block" id="missingToggleBtn" onclick="toggleMissingView()">Ver todas as faltantes</button>
+    <div id="missingView" class="hidden">
+      <div class="missing-scroll" id="missingScroll"></div>
+      <div class="row" style="margin-top:10px;">
+        <button class="btn btn-primary" onclick="copyMissing()">Copiar (texto)</button>
+        <button class="btn btn-secondary" onclick="shareMissing()">Compartilhar</button>
+      </div>
+      <textarea id="missingText" class="hidden" readonly></textarea>
     </div>
   </div>
   <div class="card">
@@ -365,8 +380,8 @@ function renderAlbum(){
   document.getElementById('albumSummary').innerHTML =
     '<div>Seleções: <b>'+names.length+'</b></div>'+
     '<div>Figurinhas: <b>'+totalOk+'/'+totalAll+'</b></div>';
-  document.getElementById('missingText').classList.add('hidden');
-  document.getElementById('exportBtns').classList.add('hidden');
+  document.getElementById('missingView').classList.add('hidden');
+  document.getElementById('missingToggleBtn').textContent = 'Ver todas as faltantes';
 }
 
 function deleteTeam(){
@@ -379,26 +394,52 @@ function deleteTeam(){
   renderAlbum();
 }
 
-function buildMissingText(){
+function buildMissingData(){
   const db = loadDB();
   const names = Object.keys(db.teams).sort();
-  let lines = ['Figurinhas faltando — Álbum Copa do Mundo 2026', ''];
-  let any=false;
+  const sections = [];
   names.forEach(name=>{
     const t = db.teams[name];
     const labels = getLabels(t);
     const missing = labels.filter(label=> !t.status[label]);
-    if(missing.length){
-      any=true;
-      lines.push(name+' ('+missing.length+' faltando): '+missing.join(', '));
-    }
+    if(missing.length) sections.push({name, missing});
   });
-  if(!any) lines.push('Nenhuma figurinha faltando nas seleções marcadas. 🎉');
-  const txt = lines.join('\n');
-  const ta = document.getElementById('missingText');
-  ta.value = txt; ta.classList.remove('hidden');
-  document.getElementById('exportBtns').classList.remove('hidden');
+  return sections;
 }
+
+function buildMissingText(sections){
+  sections = sections || buildMissingData();
+  let lines = ['Figurinhas faltando — Álbum Copa do Mundo 2026', ''];
+  if(sections.length===0) lines.push('Nenhuma figurinha faltando nas seleções marcadas. 🎉');
+  else sections.forEach(s=> lines.push(s.name+' ('+s.missing.length+' faltando): '+s.missing.join(', ')));
+  document.getElementById('missingText').value = lines.join('\n');
+}
+
+function renderMissingView(){
+  const sections = buildMissingData();
+  const el = document.getElementById('missingScroll');
+  if(sections.length===0){
+    el.innerHTML = '<div class="missing-all-ok">Nenhuma figurinha faltando nas seleções marcadas. 🎉</div>';
+  } else {
+    el.innerHTML = sections.map(s=>
+      '<div class="missing-section">'+
+        '<div class="missing-title"><span>'+s.name+'</span><span class="missing-count">'+s.missing.length+' faltando</span></div>'+
+        '<div class="missing-chips">'+s.missing.map(m=>'<span class="missing-chip">'+m+'</span>').join('')+'</div>'+
+      '</div>'
+    ).join('');
+  }
+  buildMissingText(sections);
+}
+
+function toggleMissingView(){
+  const view = document.getElementById('missingView');
+  const btn = document.getElementById('missingToggleBtn');
+  const willShow = view.classList.contains('hidden');
+  view.classList.toggle('hidden', !willShow);
+  btn.textContent = willShow ? 'Ocultar faltantes' : 'Ver todas as faltantes';
+  if(willShow) renderMissingView();
+}
+
 function copyMissing(){
   const ta = document.getElementById('missingText');
   ta.select(); document.execCommand('copy');
