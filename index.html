@@ -82,6 +82,9 @@
     user-select:none;transition:transform .06s;}
   .missing-chip:active{transform:scale(.92);background:var(--verde);color:#fff;border-color:var(--verde);}
   .missing-all-ok{text-align:center;color:var(--muted);padding:20px 10px;font-size:13px;}
+  .missing-group-title{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;
+    color:var(--amarelo);margin:14px 0 8px;padding-bottom:4px;border-bottom:1px solid var(--linha);}
+  .missing-group-title:first-child{margin-top:0;}
 </style>
 </head>
 <body>
@@ -217,7 +220,7 @@ function orderedTeamNames(names){
 const TEAM_META = {
   "México":{code:"MEX",iso2:"MX"}, "África do Sul":{code:"RSA",iso2:"ZA"}, "Coreia do Sul":{code:"KOR",iso2:"KR"}, "Tchéquia":{code:"CZE",iso2:"CZ"},
   "Canadá":{code:"CAN",iso2:"CA"}, "Bósnia e Herzegovina":{code:"BIH",iso2:"BA"}, "Catar":{code:"QAT",iso2:"QA"}, "Suíça":{code:"SUI",iso2:"CH"},
-  "Brasil":{code:"BRA",iso2:"BR"}, "Marrocos":{code:"MAR",iso2:"MA"}, "Haiti":{code:"HAI",iso2:"HT"}, "Escócia":{code:"SCO",iso2:null},
+  "Brasil":{code:"BRA",iso2:"BR"}, "Marrocos":{code:"MAR",iso2:"MA"}, "Haiti":{code:"HAI",iso2:"HT"}, "Escócia":{code:"SCO",flag:tagFlag('gbsct')},
   "Estados Unidos":{code:"USA",iso2:"US"}, "Paraguai":{code:"PAR",iso2:"PY"}, "Austrália":{code:"AUS",iso2:"AU"}, "Turquia":{code:"TUR",iso2:"TR"},
   "Alemanha":{code:"GER",iso2:"DE"}, "Curaçao":{code:"CUW",iso2:"CW"}, "Costa do Marfim":{code:"CIV",iso2:"CI"}, "Equador":{code:"ECU",iso2:"EC"},
   "Holanda":{code:"NED",iso2:"NL"}, "Japão":{code:"JPN",iso2:"JP"}, "Suécia":{code:"SWE",iso2:"SE"}, "Tunísia":{code:"TUN",iso2:"TN"},
@@ -226,7 +229,7 @@ const TEAM_META = {
   "França":{code:"FRA",iso2:"FR"}, "Senegal":{code:"SEN",iso2:"SN"}, "Iraque":{code:"IRQ",iso2:"IQ"}, "Noruega":{code:"NOR",iso2:"NO"},
   "Argentina":{code:"ARG",iso2:"AR"}, "Argélia":{code:"ALG",iso2:"DZ"}, "Áustria":{code:"AUT",iso2:"AT"}, "Jordânia":{code:"JOR",iso2:"JO"},
   "Portugal":{code:"POR",iso2:"PT"}, "RD Congo":{code:"COD",iso2:"CD"}, "Uzbequistão":{code:"UZB",iso2:"UZ"}, "Colômbia":{code:"COL",iso2:"CO"},
-  "Inglaterra":{code:"ENG",iso2:null}, "Croácia":{code:"CRO",iso2:"HR"}, "Gana":{code:"GHA",iso2:"GH"}, "Panamá":{code:"PAN",iso2:"PA"}
+  "Inglaterra":{code:"ENG",flag:tagFlag('gbeng')}, "Croácia":{code:"CRO",iso2:"HR"}, "Gana":{code:"GHA",iso2:"GH"}, "Panamá":{code:"PAN",iso2:"PA"}
 };
 
 const SPECIAL_META = {
@@ -240,12 +243,24 @@ function flagEmoji(iso2){
   return iso2.toUpperCase().replace(/./g, c=> String.fromCodePoint(127397 + c.charCodeAt(0)));
 }
 
+// bandeiras "sub-nacionais" (Escócia, Inglaterra) não têm código ISO de 2
+// letras — são montadas por sequência de tags Unicode, gerada por código
+// (em vez de colar o emoji pronto, que é frágil de copiar/colar sem corromper).
+function tagFlag(code){
+  const TAG_BASE = 0xE0000;
+  let s = String.fromCodePoint(0x1F3F4);
+  for(const ch of code) s += String.fromCodePoint(TAG_BASE + ch.charCodeAt(0));
+  s += String.fromCodePoint(TAG_BASE + 0x7F);
+  return s;
+}
+
 // monta flag/código/rótulo pra exibição, cobrindo seleções conhecidas,
 // categorias especiais e nomes digitados manualmente
 function sectionHeaderParts(name){
   if(TEAM_META[name]){
     const m = TEAM_META[name];
-    return { flag: flagEmoji(m.iso2), code: m.code, label: name, isSpecial: false };
+    const flag = m.flag!==undefined ? m.flag : flagEmoji(m.iso2);
+    return { flag, code: m.code, label: name, isSpecial: false };
   }
   if(SPECIAL_META[name]){
     const m = SPECIAL_META[name];
@@ -486,17 +501,44 @@ function markMissingAsHave(name, label){
   if(currentTeamName()===name) renderGrid();
 }
 
+// agrupa as seções de faltantes por grupo do sorteio (A–L), depois as
+// categorias especiais ("Extras") e por fim seleções digitadas manualmente
+// que não estão nas listas conhecidas ("Outras")
+function groupMissingSections(sections){
+  const byName = {};
+  sections.forEach(s=>{ byName[s.name] = s; });
+  const knownNames = new Set(TEAMS.concat(Object.keys(SPECIAL_SETS)));
+  const groups = [];
+
+  Object.keys(GROUPS).forEach(groupName=>{
+    const items = GROUPS[groupName].filter(t=> byName[t]).map(t=> byName[t]);
+    if(items.length) groups.push({title: groupName, items});
+  });
+
+  const specialItems = Object.keys(SPECIAL_SETS).filter(n=> byName[n]).map(n=> byName[n]);
+  if(specialItems.length) groups.push({title: 'Extras', items: specialItems});
+
+  const otherItems = sections.filter(s=> !knownNames.has(s.name));
+  if(otherItems.length) groups.push({title: 'Outras', items: otherItems});
+
+  return groups;
+}
+
 function buildMissingText(sections){
   sections = sections || buildMissingData();
   const lines = ['⚽ *Álbum Copa 2026* — figurinhas faltando', ''];
-  if(sections.length===0){
+  const groups = groupMissingSections(sections);
+  if(groups.length===0){
     lines.push('Nenhuma figurinha faltando nas seleções marcadas. 🎉');
   } else {
-    sections.forEach(s=>{
-      const h = sectionHeaderParts(s.name);
-      const codedMissing = h.isSpecial ? s.missing : s.missing.map(m=> h.code+m);
-      lines.push((h.flag? h.flag+' ':'')+'*'+h.code+'* — '+h.label+' ('+s.missing.length+' faltando)');
-      lines.push(codedMissing.join(', '));
+    groups.forEach(g=>{
+      lines.push('📁 *'+g.title+'*');
+      g.items.forEach(s=>{
+        const h = sectionHeaderParts(s.name);
+        const codedMissing = h.isSpecial ? s.missing : s.missing.map(m=> h.code+m);
+        lines.push((h.flag? h.flag+' ':'')+'*'+h.code+'* — '+h.label+' ('+s.missing.length+' faltando)');
+        lines.push(codedMissing.join(', '));
+      });
       lines.push('');
     });
   }
@@ -507,21 +549,27 @@ function escapeAttr(s){
   return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;');
 }
 
+function missingSectionHtml(s){
+  const h = sectionHeaderParts(s.name);
+  return '<div class="missing-section">'+
+    '<div class="missing-title"><span>'+(h.flag? h.flag+' ':'')+s.name+'</span><span class="missing-count">'+s.missing.length+' faltando</span></div>'+
+    '<div class="missing-chips">'+s.missing.map(m=>
+      '<span class="missing-chip" data-team="'+escapeAttr(s.name)+'" data-label="'+escapeAttr(m)+'" title="Toque pra marcar como \'tenho\'">'+m+'</span>'
+    ).join('')+'</div>'+
+  '</div>';
+}
+
 function renderMissingView(){
   const sections = buildMissingData();
   const el = document.getElementById('missingScroll');
-  if(sections.length===0){
+  const groups = groupMissingSections(sections);
+  if(groups.length===0){
     el.innerHTML = '<div class="missing-all-ok">Nenhuma figurinha faltando nas seleções marcadas. 🎉</div>';
   } else {
-    el.innerHTML = sections.map(s=>{
-      const h = sectionHeaderParts(s.name);
-      return '<div class="missing-section">'+
-        '<div class="missing-title"><span>'+(h.flag? h.flag+' ':'')+s.name+'</span><span class="missing-count">'+s.missing.length+' faltando</span></div>'+
-        '<div class="missing-chips">'+s.missing.map(m=>
-          '<span class="missing-chip" data-team="'+escapeAttr(s.name)+'" data-label="'+escapeAttr(m)+'" title="Toque pra marcar como \'tenho\'">'+m+'</span>'
-        ).join('')+'</div>'+
-      '</div>';
-    }).join('');
+    el.innerHTML = groups.map(g=>
+      '<div class="missing-group-title">'+g.title+'</div>'+
+      g.items.map(missingSectionHtml).join('')
+    ).join('');
   }
   buildMissingText(sections);
 }
