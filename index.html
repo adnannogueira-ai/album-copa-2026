@@ -211,6 +211,49 @@ function orderedTeamNames(names){
   });
 }
 
+// códigos curtos (padrão FIFA) e bandeiras — só pra deixar a lista de
+// compartilhamento mais compacta/visual. Não são os números oficiais do
+// álbum físico; os números continuam sendo os mesmos de cada seleção.
+const TEAM_META = {
+  "México":{code:"MEX",iso2:"MX"}, "África do Sul":{code:"RSA",iso2:"ZA"}, "Coreia do Sul":{code:"KOR",iso2:"KR"}, "Tchéquia":{code:"CZE",iso2:"CZ"},
+  "Canadá":{code:"CAN",iso2:"CA"}, "Bósnia e Herzegovina":{code:"BIH",iso2:"BA"}, "Catar":{code:"QAT",iso2:"QA"}, "Suíça":{code:"SUI",iso2:"CH"},
+  "Brasil":{code:"BRA",iso2:"BR"}, "Marrocos":{code:"MAR",iso2:"MA"}, "Haiti":{code:"HAI",iso2:"HT"}, "Escócia":{code:"SCO",iso2:null},
+  "Estados Unidos":{code:"USA",iso2:"US"}, "Paraguai":{code:"PAR",iso2:"PY"}, "Austrália":{code:"AUS",iso2:"AU"}, "Turquia":{code:"TUR",iso2:"TR"},
+  "Alemanha":{code:"GER",iso2:"DE"}, "Curaçao":{code:"CUW",iso2:"CW"}, "Costa do Marfim":{code:"CIV",iso2:"CI"}, "Equador":{code:"ECU",iso2:"EC"},
+  "Holanda":{code:"NED",iso2:"NL"}, "Japão":{code:"JPN",iso2:"JP"}, "Suécia":{code:"SWE",iso2:"SE"}, "Tunísia":{code:"TUN",iso2:"TN"},
+  "Bélgica":{code:"BEL",iso2:"BE"}, "Egito":{code:"EGY",iso2:"EG"}, "Irã":{code:"IRN",iso2:"IR"}, "Nova Zelândia":{code:"NZL",iso2:"NZ"},
+  "Espanha":{code:"ESP",iso2:"ES"}, "Cabo Verde":{code:"CPV",iso2:"CV"}, "Arábia Saudita":{code:"KSA",iso2:"SA"}, "Uruguai":{code:"URU",iso2:"UY"},
+  "França":{code:"FRA",iso2:"FR"}, "Senegal":{code:"SEN",iso2:"SN"}, "Iraque":{code:"IRQ",iso2:"IQ"}, "Noruega":{code:"NOR",iso2:"NO"},
+  "Argentina":{code:"ARG",iso2:"AR"}, "Argélia":{code:"ALG",iso2:"DZ"}, "Áustria":{code:"AUT",iso2:"AT"}, "Jordânia":{code:"JOR",iso2:"JO"},
+  "Portugal":{code:"POR",iso2:"PT"}, "RD Congo":{code:"COD",iso2:"CD"}, "Uzbequistão":{code:"UZB",iso2:"UZ"}, "Colômbia":{code:"COL",iso2:"CO"},
+  "Inglaterra":{code:"ENG",iso2:null}, "Croácia":{code:"CRO",iso2:"HR"}, "Gana":{code:"GHA",iso2:"GH"}, "Panamá":{code:"PAN",iso2:"PA"}
+};
+
+const SPECIAL_META = {
+  "00 · We Are Panini": {code:"PANINI", emoji:"⭐"},
+  "Figurinhas Extras (FWC1–FWC19)": {code:"EXTRAS", emoji:"✨"},
+  "Figurinhas Coca-Cola (CC1–CC14)": {code:"COCA", emoji:"🥤"}
+};
+
+function flagEmoji(iso2){
+  if(!iso2) return '';
+  return iso2.toUpperCase().replace(/./g, c=> String.fromCodePoint(127397 + c.charCodeAt(0)));
+}
+
+// monta flag/código/rótulo pra exibição, cobrindo seleções conhecidas,
+// categorias especiais e nomes digitados manualmente
+function sectionHeaderParts(name){
+  if(TEAM_META[name]){
+    const m = TEAM_META[name];
+    return { flag: flagEmoji(m.iso2), code: m.code, label: name, isSpecial: false };
+  }
+  if(SPECIAL_META[name]){
+    const m = SPECIAL_META[name];
+    return { flag: m.emoji, code: m.code, label: name, isSpecial: true };
+  }
+  return { flag: '', code: name.replace(/[^A-Za-zÀ-ÿ]/g,'').slice(0,3).toUpperCase()||'???', label: name, isSpecial: false };
+}
+
 const STORAGE_KEY = "album_copa_2026_v2";
 
 function loadDB(){
@@ -445,10 +488,19 @@ function markMissingAsHave(name, label){
 
 function buildMissingText(sections){
   sections = sections || buildMissingData();
-  let lines = ['Figurinhas faltando — Álbum Copa do Mundo 2026', ''];
-  if(sections.length===0) lines.push('Nenhuma figurinha faltando nas seleções marcadas. 🎉');
-  else sections.forEach(s=> lines.push(s.name+' ('+s.missing.length+' faltando): '+s.missing.join(', ')));
-  document.getElementById('missingText').value = lines.join('\n');
+  const lines = ['⚽ *Álbum Copa 2026* — figurinhas faltando', ''];
+  if(sections.length===0){
+    lines.push('Nenhuma figurinha faltando nas seleções marcadas. 🎉');
+  } else {
+    sections.forEach(s=>{
+      const h = sectionHeaderParts(s.name);
+      const codedMissing = h.isSpecial ? s.missing : s.missing.map(m=> h.code+m);
+      lines.push((h.flag? h.flag+' ':'')+'*'+h.code+'* — '+h.label+' ('+s.missing.length+' faltando)');
+      lines.push(codedMissing.join(', '));
+      lines.push('');
+    });
+  }
+  document.getElementById('missingText').value = lines.join('\n').trim();
 }
 
 function escapeAttr(s){
@@ -461,14 +513,15 @@ function renderMissingView(){
   if(sections.length===0){
     el.innerHTML = '<div class="missing-all-ok">Nenhuma figurinha faltando nas seleções marcadas. 🎉</div>';
   } else {
-    el.innerHTML = sections.map(s=>
-      '<div class="missing-section">'+
-        '<div class="missing-title"><span>'+s.name+'</span><span class="missing-count">'+s.missing.length+' faltando</span></div>'+
+    el.innerHTML = sections.map(s=>{
+      const h = sectionHeaderParts(s.name);
+      return '<div class="missing-section">'+
+        '<div class="missing-title"><span>'+(h.flag? h.flag+' ':'')+s.name+'</span><span class="missing-count">'+s.missing.length+' faltando</span></div>'+
         '<div class="missing-chips">'+s.missing.map(m=>
           '<span class="missing-chip" data-team="'+escapeAttr(s.name)+'" data-label="'+escapeAttr(m)+'" title="Toque pra marcar como \'tenho\'">'+m+'</span>'
         ).join('')+'</div>'+
-      '</div>'
-    ).join('');
+      '</div>';
+    }).join('');
   }
   buildMissingText(sections);
 }
