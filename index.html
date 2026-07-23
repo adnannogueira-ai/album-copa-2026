@@ -78,7 +78,9 @@
   .missing-count{font-size:12px;color:var(--muted);font-weight:600;}
   .missing-chips{display:flex;flex-wrap:wrap;gap:6px;}
   .missing-chip{background:#3a1414;color:#f3a9a4;border:1px solid var(--vermelho);
-    border-radius:8px;padding:4px 8px;font-size:12px;font-weight:700;}
+    border-radius:8px;padding:4px 8px;font-size:12px;font-weight:700;cursor:pointer;
+    user-select:none;transition:transform .06s;}
+  .missing-chip:active{transform:scale(.92);background:var(--verde);color:#fff;border-color:var(--verde);}
   .missing-all-ok{text-align:center;color:var(--muted);padding:20px 10px;font-size:13px;}
 </style>
 </head>
@@ -135,7 +137,7 @@
   </div>
   <div class="card">
     <h2>Faltando em tudo</h2>
-    <p class="hint">Veja de uma vez só o que falta em cada seleção e nas figurinhas especiais.</p>
+    <p class="hint">Veja de uma vez só o que falta em cada seleção e nas figurinhas especiais, na ordem do álbum. Toque numa figurinha da lista pra marcar como "tenho" (útil numa troca).</p>
     <button class="btn btn-secondary btn-block" id="missingToggleBtn" onclick="toggleMissingView()">Ver todas as faltantes</button>
     <div id="missingView" class="hidden">
       <div class="missing-scroll" id="missingScroll"></div>
@@ -192,6 +194,23 @@ const SPECIAL_SETS = {
   "Figurinhas Coca-Cola (CC1–CC14)": Array.from({length:14}, (_,i)=>"CC"+(i+1))
 };
 
+// índice de ordem "do álbum": seleções na ordem dos grupos A–L, depois as
+// categorias especiais na ordem em que aparecem no card "Seleção"; qualquer
+// seleção digitada manualmente (fora dessa lista) vai pro final, em ordem alfabética.
+const ORDER_INDEX = {};
+TEAMS.forEach((t,i)=>{ ORDER_INDEX[t] = i; });
+Object.keys(SPECIAL_SETS).forEach((name,i)=>{ ORDER_INDEX[name] = TEAMS.length + i; });
+
+function orderedTeamNames(names){
+  return names.slice().sort((a,b)=>{
+    const ai = ORDER_INDEX[a], bi = ORDER_INDEX[b];
+    if(ai!==undefined && bi!==undefined) return ai-bi;
+    if(ai!==undefined) return -1;
+    if(bi!==undefined) return 1;
+    return a.localeCompare(b);
+  });
+}
+
 const STORAGE_KEY = "album_copa_2026_v2";
 
 function loadDB(){
@@ -206,7 +225,11 @@ function switchTab(name){
   document.getElementById('view-album').classList.toggle('hidden', name!=='album');
   document.getElementById('tab-mark').classList.toggle('active', name==='mark');
   document.getElementById('tab-album').classList.toggle('active', name==='album');
-  if(name==='album') renderAlbum();
+  if(name==='album'){
+    renderAlbum();
+    document.getElementById('missingView').classList.add('hidden');
+    document.getElementById('missingToggleBtn').textContent = 'Ver todas as faltantes';
+  }
 }
 
 /* ---------------- Seleção de time ---------------- */
@@ -354,7 +377,7 @@ function renderAlbum(){
   if(names.length===0){ emptyEl.classList.remove('hidden'); }
   else emptyEl.classList.add('hidden');
 
-  names.sort().forEach(name=>{
+  orderedTeamNames(names).forEach(name=>{
     const t = db.teams[name];
     const okN = Object.values(t.status).filter(Boolean).length;
     const missing = t.total - okN;
@@ -380,8 +403,6 @@ function renderAlbum(){
   document.getElementById('albumSummary').innerHTML =
     '<div>Seleções: <b>'+names.length+'</b></div>'+
     '<div>Figurinhas: <b>'+totalOk+'/'+totalAll+'</b></div>';
-  document.getElementById('missingView').classList.add('hidden');
-  document.getElementById('missingToggleBtn').textContent = 'Ver todas as faltantes';
 }
 
 function deleteTeam(){
@@ -396,7 +417,7 @@ function deleteTeam(){
 
 function buildMissingData(){
   const db = loadDB();
-  const names = Object.keys(db.teams).sort();
+  const names = orderedTeamNames(Object.keys(db.teams));
   const sections = [];
   names.forEach(name=>{
     const t = db.teams[name];
@@ -407,12 +428,31 @@ function buildMissingData(){
   return sections;
 }
 
+// marca uma figurinha como "tenho" direto na lista de faltantes (ex: durante
+// uma troca) e atualiza a tabela principal (grade/álbum) na hora.
+function markMissingAsHave(name, label){
+  const db = loadDB();
+  const rec = db.teams[name];
+  if(!rec) return;
+  rec.status[label] = true;
+  rec.updatedAt = new Date().toISOString();
+  saveDB(db);
+  renderMissingView();
+  renderAlbum();
+  // se essa seleção estiver aberta na grade de marcação, atualiza também
+  if(currentTeamName()===name) renderGrid();
+}
+
 function buildMissingText(sections){
   sections = sections || buildMissingData();
   let lines = ['Figurinhas faltando — Álbum Copa do Mundo 2026', ''];
   if(sections.length===0) lines.push('Nenhuma figurinha faltando nas seleções marcadas. 🎉');
   else sections.forEach(s=> lines.push(s.name+' ('+s.missing.length+' faltando): '+s.missing.join(', ')));
   document.getElementById('missingText').value = lines.join('\n');
+}
+
+function escapeAttr(s){
+  return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;');
 }
 
 function renderMissingView(){
@@ -424,12 +464,22 @@ function renderMissingView(){
     el.innerHTML = sections.map(s=>
       '<div class="missing-section">'+
         '<div class="missing-title"><span>'+s.name+'</span><span class="missing-count">'+s.missing.length+' faltando</span></div>'+
-        '<div class="missing-chips">'+s.missing.map(m=>'<span class="missing-chip">'+m+'</span>').join('')+'</div>'+
+        '<div class="missing-chips">'+s.missing.map(m=>
+          '<span class="missing-chip" data-team="'+escapeAttr(s.name)+'" data-label="'+escapeAttr(m)+'" title="Toque pra marcar como \'tenho\'">'+m+'</span>'
+        ).join('')+'</div>'+
       '</div>'
     ).join('');
   }
   buildMissingText(sections);
 }
+
+// toque num chip da lista de faltantes = "consegui essa" (ex: numa troca) —
+// marca na hora, sem precisar ir até a grade da seleção.
+document.getElementById('missingScroll').addEventListener('click', (e)=>{
+  const chip = e.target.closest('.missing-chip');
+  if(!chip) return;
+  markMissingAsHave(chip.dataset.team, chip.dataset.label);
+});
 
 function toggleMissingView(){
   const view = document.getElementById('missingView');
