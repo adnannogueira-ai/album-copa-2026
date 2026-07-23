@@ -152,12 +152,23 @@
 
 <script>
 /* ---------------- Dados base ---------------- */
-const TEAMS = ["Alemanha","Arábia Saudita","Argélia","Argentina","Austrália","Áustria","Bélgica",
-"Bósnia e Herzegovina","Brasil","Cabo Verde","Canadá","Catar","Colômbia","Coreia do Sul",
-"Costa do Marfim","Croácia","Curaçao","Egito","Equador","Escócia","Espanha","Estados Unidos",
-"França","Gana","Haiti","Holanda","Inglaterra","Irã","Iraque","Jordânia","Japão","Marrocos",
-"México","Nova Zelândia","Noruega","Panamá","Paraguai","Portugal","RD Congo","África do Sul",
-"Senegal","Suécia","Suíça","Tchéquia","Tunísia","Turquia","Uruguai","Uzbequistão"];
+// ordem oficial do sorteio dos grupos (Cidade do México/Washington, 5/dez/2025) —
+// é a mesma ordem usada nas páginas do álbum
+const GROUPS = {
+  "Grupo A": ["México","África do Sul","Coreia do Sul","Tchéquia"],
+  "Grupo B": ["Canadá","Bósnia e Herzegovina","Catar","Suíça"],
+  "Grupo C": ["Brasil","Marrocos","Haiti","Escócia"],
+  "Grupo D": ["Estados Unidos","Paraguai","Austrália","Turquia"],
+  "Grupo E": ["Alemanha","Curaçao","Costa do Marfim","Equador"],
+  "Grupo F": ["Holanda","Japão","Suécia","Tunísia"],
+  "Grupo G": ["Bélgica","Egito","Irã","Nova Zelândia"],
+  "Grupo H": ["Espanha","Cabo Verde","Arábia Saudita","Uruguai"],
+  "Grupo I": ["França","Senegal","Iraque","Noruega"],
+  "Grupo J": ["Argentina","Argélia","Áustria","Jordânia"],
+  "Grupo K": ["Portugal","RD Congo","Uzbequistão","Colômbia"],
+  "Grupo L": ["Inglaterra","Croácia","Gana","Panamá"]
+};
+const TEAMS = Object.values(GROUPS).flat();
 
 // categorias especiais do álbum (não são seleções, têm numeração própria e fixa)
 const SPECIAL_SETS = {
@@ -185,11 +196,13 @@ function switchTab(name){
 
 /* ---------------- Seleção de time ---------------- */
 const teamSelect = document.getElementById('teamSelect');
-const groupTeams = document.createElement('optgroup'); groupTeams.label = 'Seleções';
-TEAMS.forEach(t=>{
-  const o = document.createElement('option'); o.value=t; o.textContent=t; groupTeams.appendChild(o);
+Object.keys(GROUPS).forEach(groupName=>{
+  const og = document.createElement('optgroup'); og.label = groupName;
+  GROUPS[groupName].forEach(t=>{
+    const o = document.createElement('option'); o.value=t; o.textContent=t; og.appendChild(o);
+  });
+  teamSelect.appendChild(og);
 });
-teamSelect.appendChild(groupTeams);
 
 const groupExtras = document.createElement('optgroup'); groupExtras.label = 'Extras';
 Object.keys(SPECIAL_SETS).forEach(name=>{
