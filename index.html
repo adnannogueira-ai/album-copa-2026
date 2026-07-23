@@ -277,6 +277,22 @@ function loadDB(){
 }
 function saveDB(db){ localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); }
 
+// as 3 categorias especiais (00, Extras, Coca-Cola) são fixas em todo álbum
+// físico — não dependem do usuário escolher/marcar nada primeiro, como as
+// seleções. Por isso já entram automaticamente no álbum e na lista de
+// faltantes desde a primeira vez que o app abre.
+(function ensureSpecialRecords(){
+  const db = loadDB();
+  let changed = false;
+  Object.keys(SPECIAL_SETS).forEach(name=>{
+    if(!db.teams[name]){
+      db.teams[name] = { total: SPECIAL_SETS[name].length, labels: SPECIAL_SETS[name].slice(), status: {}, updatedAt: new Date().toISOString() };
+      changed = true;
+    }
+  });
+  if(changed) saveDB(db);
+})();
+
 /* ---------------- Tabs ---------------- */
 function switchTab(name){
   document.getElementById('view-mark').classList.toggle('hidden', name!=='mark');
